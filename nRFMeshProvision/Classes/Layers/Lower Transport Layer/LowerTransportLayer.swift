@@ -314,7 +314,7 @@ private extension LowerTransportLayer {
     ///              than the local one are not checked against reply attacks.
     ///
     /// - parameter networkPdu: The Network PDU to validate.
-    func checkAgainstReplayAttack(_ networkPdu: NetworkPdu) -> Bool {
+/*    func checkAgainstReplayAttack(_ networkPdu: NetworkPdu) -> Bool {
         // Don't check messages sent to other Nodes.
         guard !networkPdu.destination.isUnicast ||
               meshNetwork.localProvisioner?.node?.hasAllocatedAddress(networkPdu.destination) ?? false else {
@@ -375,6 +375,64 @@ private extension LowerTransportLayer {
         }
         // SeqAuth is valid, save the new sequence authentication value.
         defaults.set(NSNumber(value: receivedSeqAuth), forKey: networkPdu.source.hex)
+        return true
+    }
+*/
+    func checkAgainstReplayAttack(_ networkPdu: NetworkPdu) -> Bool {
+        // Don't check messages sent to another Node's Elements.
+        guard !networkPdu.destination.isUnicast ||
+              meshNetwork.localProvisioner?.node?.hasAllocatedAddress(networkPdu.destination) ?? false else {
+            return true
+        }
+        let sequence = networkPdu.messageSequence
+        let receivedSeqAuth = (UInt64(networkPdu.ivIndex) << 24) | UInt64(sequence)
+        let networkPduIvIndex = UInt64(networkPdu.ivIndex)
+        let sequenceTemp = UInt64(sequence)
+        logger?.w(.lowerTransport, "Received receivedSeqAuth: \(receivedSeqAuth), \(networkPduIvIndex), \(sequenceTemp), \(sequence)")
+        
+        if let localSeqAuth = defaults.object(forKey: networkPdu.source.hex) as? NSNumber {
+            // In general, the SeqAuth of the received message must be greater
+            // than SeqAuth of any previously received message from the same source.
+            // However, for SAR (Segmentation and Reassembly) sessions, it is
+            // the SeqAuth of the message, not segment, that is being checked.
+            // If SAR is active (at least one segment for the same SeqAuth has
+            // been previously received), the segments may be processed in any order.
+            // The SeqAuth of this message must be greater or equal to the last one.
+            var reassemblyInProgress = false
+            if networkPdu.isSegmented {
+                let sequenceZero = UInt16(sequence & 0x1FFF)
+                let key = UInt32(keyFor: networkPdu.source, sequenceZero: sequenceZero)
+                reassemblyInProgress = incompleteSegments[key] != nil ||
+                                       acknowledgments[networkPdu.source]?.sequenceZero == sequenceZero
+            }
+            /*
+             guard receivedSeqAuth > localSeqAuth.uint64Value ||
+                  (reassemblyInProgress && receivedSeqAuth == localSeqAuth.uint64Value) else {
+                // Ignore that message.
+                logger?.w(.lowerTransport, "Discarding packet (seqAuth: \(receivedSeqAuth), expected > \(localSeqAuth))")
+                return false
+            }
+             */
+            
+            //Ferdi start
+            if ((receivedSeqAuth > localSeqAuth.uint64Value) ||
+                    (reassemblyInProgress && receivedSeqAuth == localSeqAuth.uint64Value)) {
+                //everything is good
+            }
+            else if (localSeqAuth.uint64Value > (receivedSeqAuth + 32)) {
+                //for some reason expected sequence number is much higher so ignore that and go ahead and process packet anyway
+                logger?.w(.lowerTransport, "Still processing packet (receivedSeqAuth: \(receivedSeqAuth), localSeqAuth: \(localSeqAuth))")
+            }
+            else {
+                // Ignore that message.
+                logger?.w(.lowerTransport, "Discarding packet (seqAuth: \(receivedSeqAuth), expected > \(localSeqAuth))")
+                return false
+            }
+            //Ferdi end
+        }
+        // SeqAuth is valid, save the new sequence authentication value.
+        defaults.set(NSNumber(value: receivedSeqAuth), forKey: networkPdu.source.hex)
+        logger?.w(.lowerTransport, "Stored receivedSeqAuth: \(receivedSeqAuth)")
         return true
     }
     
