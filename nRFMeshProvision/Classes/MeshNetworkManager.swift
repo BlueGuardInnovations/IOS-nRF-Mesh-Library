@@ -446,14 +446,17 @@ public extension MeshNetworkManager {
             print("Error: Element does not belong to a Node")
             throw AccessError.invalidDestination
         }
-        guard let firstKeyIndex = model.bind.first,
-              let meshNetwork = meshNetwork,
-              let applicationKey = meshNetwork.applicationKeys[firstKeyIndex] else {
-            print("Error: Model is not bound to any Application Key")
-            throw AccessError.modelNotBoundToAppKey
-        }
+        //guard let firstKeyIndex = model.bind.first,
+        //      let meshNetwork = meshNetwork,
+        //      let applicationKey = meshNetwork.applicationKeys[firstKeyIndex] else {
+        //    print("Error: Model is not bound to any Application Key")
+        //    throw AccessError.modelNotBoundToAppKey
+        //}
+        //return try send(message, from: localElement, to: MeshAddress(element.unicastAddress),
+        //                withTtl: initialTtl, using: applicationKey)
+        let applicationKey = meshNetwork?.applicationKeys[0]
         return try send(message, from: localElement, to: MeshAddress(element.unicastAddress),
-                        withTtl: initialTtl, using: applicationKey)
+                        withTtl: initialTtl, using: applicationKey!)
     }
     
     /// Encrypts the message with the common Application Key bound to both given
